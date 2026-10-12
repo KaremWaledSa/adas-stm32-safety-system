@@ -1,73 +1,52 @@
-# Setup Guide
+# Setup and reproduction guide
+
+## Current verification level
+
+The repository contains recovered STM32CubeIDE metadata, source code, a linker script, startup assembly, and a Proteus project. The archive has not yet been rebuilt on a clean machine after the 2026 repository maintenance.
 
 ## Requirements
 
-| Tool | Version | Link |
-|---|---|---|
-| STM32CubeIDE | 1.13 or later | https://www.st.com/en/development-tools/stm32cubeide.html |
-| ST-Link V2 driver | Latest | Bundled with CubeIDE |
-| Proteus | 8.x | https://www.labcenter.com/ (simulation only) |
-| Serial terminal | Any | RealTerm / PuTTY / CoolTerm |
+- STM32CubeIDE with STM32F4 toolchain support
+- Proteus 8.x to open the simulation
+- A serial terminal if adapting the project to hardware
 
-## Build from Source
+## Import the firmware
 
-```
-1. Launch STM32CubeIDE
-2. File → Import → General → Existing Projects into Workspace
-3. Browse to:  firmware/stm32_f401/
-4. Select the project and click Finish
-5. Project → Build All   (Ctrl+B)
-6. Output HEX/ELF appears in:  firmware/stm32_f401/Debug/
-```
+1. Open STM32CubeIDE.
+2. Choose **File > Import > General > Existing Projects into Workspace**.
+3. Select `firmware/stm32_f401/`.
+4. Confirm that the project named `Final` is detected.
+5. Build the Debug configuration.
+6. Record the exact IDE version and any compiler diagnostics in `VALIDATION.md`.
 
-## Flash to Hardware
+The repository includes `.project` and `.cproject`. Generated `Debug/` and `Release/` directories should not be committed.
 
-```
-1. Connect ST-Link V2 to the STM32F401CC Black Pill:
-   ST-Link  →  Black Pill
-   SWDIO    →  DIO
-   SWCLK    →  CLK
-   GND      →  GND
-   3.3V     →  3.3V
+## Open the simulation
 
-2. In STM32CubeIDE: Run → Debug Configuration → ST-Link
-3. Or flash directly:  STM32_Programmer_CLI -c port=SWD -d Debug/stm32_f401.hex
-```
+1. Open `simulation/proteus/adas_simulation.pdsprj` in Proteus.
+2. Confirm that the configured MCU binary resolves correctly.
+3. If the archived path is missing, rebuild the firmware and select the generated HEX file.
+4. Start the simulation and exercise the ultrasonic-distance and IR inputs.
 
-## Run the Proteus Simulation
+Expected state logic:
 
-```
-1. Open:  simulation/proteus/NTI project.pdsprj
-2. The HEX file (InfraredSensorsTEP.HEX) is already configured
-3. Press the Play button to start simulation
-4. Use the HC-SR04 distance slider to trigger state transitions:
-   - > 20 cm  →  High-speed mode
-   - 10–20 cm →  Low-speed mode
-   - < 10 cm  →  Idle / stop
+| Input | Expected state |
+| --- | --- |
+| distance greater than 20 cm | high-speed state |
+| distance from 10 cm to 20 cm | low-speed state |
+| distance below 10 cm | stopped/idle state |
+| both IR sensors on the stop condition | stopped/idle state |
+
+## UART telemetry
+
+The firmware initializes USART1 on PA9/PA10 and sends an ASCII frame containing speed and distance. The current frame format is:
+
+```text
+<speed> <distance>\r\n
 ```
 
-## UART Telemetry
+The archived configuration uses 9600 baud. Confirm data bits, parity, and stop bits from the UART driver before connecting external hardware.
 
-The firmware transmits speed and distance every state cycle on **USART1**.
+## Hardware warning
 
-| Setting | Value |
-|---|---|
-| Baud rate | 9600 |
-| Data bits | 8 |
-| Stop bits | 1 |
-| Parity | None |
-
-Connect a USB-to-UART adapter to the STM32 TX pin and open any serial terminal.
-
-## Tuning Parameters
-
-All thresholds are in `firmware/stm32_f401/Inc/SMode_Config.h`:
-
-```c
-#define HighDistance   20   // cm — transition to high-speed above this
-#define LowDistance    10   // cm — emergency stop below this
-#define HighSpeed     100   // PWM duty (0–100)
-#define LowSpeed       50   // PWM duty (0–100)
-```
-
-Change these values and rebuild to tune behavior without touching logic code.
+This repository documents a simulation project. Pin mappings, voltage levels, motor power, sensor timing, and emergency-stop behavior must be reviewed before any physical build. Do not treat the implementation as an automotive or safety controller.

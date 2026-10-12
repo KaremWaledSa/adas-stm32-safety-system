@@ -22,6 +22,7 @@
 #include "Buzzer_Interface.h"
 #include "CLCD_interface.h"
 #include "Timer_Delay.h"
+#include "APP_GUI.h"
 
 
 /******************************************************************/

@@ -1,196 +1,107 @@
-# ADAS STM32 Safety System
+# STM32 ADAS-Inspired Vehicle Simulation
 
-> Bare-metal Advanced Driver Assistance prototype on STM32F401CC — real-time obstacle detection, autonomous speed control, lane correction, and live UART telemetry, built entirely without HAL middleware.
+> A simulation-only NTI capstone exploring obstacle-aware speed states, IR-based line tracking, motor control, driver warnings, and UART telemetry on an STM32F401CC.
 
 ![Platform](https://img.shields.io/badge/Platform-STM32F401CC-blue)
-![Language](https://img.shields.io/badge/Language-C%20%28Bare--metal%29-lightgrey)
-![IDE](https://img.shields.io/badge/IDE-STM32CubeIDE-orange)
-![Simulation](https://img.shields.io/badge/Simulation-Proteus-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+![Language](https://img.shields.io/badge/Language-C%20%28register--level%29-lightgrey)
+![Simulation](https://img.shields.io/badge/Evidence-Proteus%20simulation-green)
+![Status](https://img.shields.io/badge/Status-Educational%20prototype-orange)
 
----
+![Proteus schematic for the simulated vehicle controller](docs/proteus-schematic.png)
 
-## Overview
+## Project scope
 
-This project implements a scaled-down ADAS vehicle prototype on an STM32F401CC microcontroller. The system continuously reads an HC-SR04 ultrasonic sensor and two IR sensors, then transitions autonomously between three driving states — idle (stopped), low-speed, and high-speed — while correcting lane drift and transmitting live telemetry over UART.
+This project was developed in 2023 by a team of approximately five trainees as an NTI embedded-systems capstone. It represents the control electronics of a small educational vehicle in Proteus; no physical vehicle was built or validated.
 
-All peripheral drivers (GPIO, RCC, SysTick, TIM, NVIC, UART) are written from scratch against the STM32F4 register map. No STM32 HAL or LL middleware is used.
+The team wrote the project firmware, including register-level peripheral drivers and application logic. Individual module ownership was not recorded at the time, so this repository presents the implementation as **team work** rather than assigning unsupported authorship claims.
 
----
+The project is inspired by ADAS concepts, but it is not an automotive system, a safety-certified controller, or evidence of road-ready functionality.
 
-## Features
+## Demonstrated behavior
 
-| Feature | Status | Implementation |
-|---|---|---|
-| Obstacle detection | ✅ Implemented | HC-SR04 via Timer Input Capture (interrupt-driven) |
-| Adaptive speed control | ✅ Implemented | 3-state machine, PWM duty cycle via TIM |
-| Emergency braking | ✅ Implemented | Motor stop when distance < 10 cm |
-| Lane departure detection | ✅ Implemented | Dual IR sensors, left/right reading |
-| Automatic lane correction | ✅ Implemented | Motor direction adjusted per IR output |
-| Real-time LCD display | ✅ Implemented | Mode, distance, speed updated each cycle |
-| UART telemetry | ✅ Implemented | Speed + distance streamed to PC/GUI |
-| Buzzer alerts | ✅ Implemented | Active on lane departure and idle state |
+| Function | Evidence in repository | Scope |
+| --- | --- | --- |
+| Obstacle-aware state transitions | HC-SR04 input-capture driver and state machine | Simulated |
+| Three speed states | Idle, low-speed, and high-speed application modes | Simulated |
+| IR-based line correction | Two digital IR inputs and differential motor commands | Simulated |
+| Motor speed and direction | PWM and GPIO control for an L298-style driver | Simulated |
+| Operator feedback | LCD messages and buzzer states | Simulated |
+| Telemetry | Speed and distance frame sent through UART | Source implementation |
 
----
+## Control logic
 
-## Hardware
+- Distance above `20 cm`: transition toward high-speed mode.
+- Distance from `10 cm` to `20 cm`: transition toward low-speed mode.
+- Distance below `10 cm`: transition to the stopped/idle state.
+- Two IR readings select forward, left-correction, right-correction, or stop behavior.
 
-| Component | Part | Role |
-|---|---|---|
-| Microcontroller | STM32F401CC (Black Pill) | Main controller |
-| Ultrasonic sensor | HC-SR04 | Front obstacle distance measurement |
-| IR sensors | Generic 2-channel IR | Left / right lane edge detection |
-| Motor driver | L298N dual H-bridge | Speed + direction control for 2 DC motors |
-| Display | 16×2 Character LCD | Real-time mode, speed, distance readout |
-| Alert | Active buzzer | Audible warning on lane departure / stop |
+These thresholds are configurable in `firmware/stm32_f401/Inc/SMode_Config.h`.
 
----
+## Architecture
 
-## System Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  Application Layer                   │
-│  main.c  ──►  SInit  ──►  SModes (State Machine)    │
-│                              │                       │
-│              ┌───────────────┼──────────────┐        │
-│           Idle_State   LowSpeed_State  HighSpeed_State│
-└──────────────────────────────┼──────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────┐
-│                    HAL / Service Layer                │
-│   HCSR04 │ IR │ MotorDriver │ Buzzer │ CLCD │ UART  │
-└──────────────────────────────┬──────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────┐
-│                      MCAL Layer                       │
-│         RCC │ GPIO │ SysTick │ TIM │ NVIC            │
-└─────────────────────────────────────────────────────┘
+```text
+Application
+  main + initialization + driving-state machine
+        |
+Services / component drivers
+  HC-SR04 + IR + motors + buzzer + LCD + UART
+        |
+MCAL
+  RCC + GPIO + SysTick + timers + NVIC
+        |
+STM32F401CC register map
 ```
 
----
+See [the architecture notes](docs/ARCHITECTURE.md) for the module and execution-flow breakdown.
 
-## State Machine
+## Repository structure
 
-```
-               ┌──────────┐
-   distance    │          │  distance
-   > 20 cm     │   IDLE   │◄──────────  < 10 cm (any state)
-   ────────────►  STOP    │
-               │  BUZZER  │
-               └────┬─────┘
-                    │ distance > 20 cm
-                    ▼
-          ┌─────────────────┐
-          │   HIGH SPEED    │◄──── distance > 20 cm
-          │   speed = 100   │
-          │   IR correction │
-          └────────┬────────┘
-                   │ 10 cm ≤ distance ≤ 20 cm
-                   ▼
-          ┌─────────────────┐
-          │   LOW SPEED     │
-          │   speed = 50    │
-          │   IR correction │
-          └─────────────────┘
+```text
+firmware/stm32_f401/
+  Inc/                    headers and configuration
+  Src/                    application and driver implementations
+  Startup/                STM32 startup assembly
+  .project / .cproject    recovered STM32CubeIDE configuration
+simulation/proteus/
+  adas_simulation.pdsprj  Proteus project
+  schematic.pdf           exported circuit schematic
+  InfraredSensorsTEP.HEX  archived simulation binary
+docs/
+  ARCHITECTURE.md
+  SETUP.md
+  VALIDATION.md
+  proteus-schematic.png
 ```
 
-**Distance thresholds** (configurable in `SMode_Config.h`):
+## Reproduce the archived project
 
-| Macro | Value | Meaning |
-|---|---|---|
-| `HighDistance` | 20 cm | Transition to high-speed above this |
-| `LowDistance` | 10 cm | Emergency stop below this |
-| `HighSpeed` | 100 (PWM) | Full duty cycle |
-| `LowSpeed` | 50 (PWM) | Half duty cycle |
+Follow [the setup guide](docs/SETUP.md). The source and project configuration have been recovered, but the 2026 repository cleanup has not yet been rebuilt in a fresh STM32CubeIDE installation. That remaining verification is tracked in [VALIDATION.md](docs/VALIDATION.md).
 
-**IR lane correction** (same logic in all moving states):
+## Evidence and limitations
 
-| Left IR | Right IR | Action |
-|---|---|---|
-| White | White | Move forward |
-| Black | White | Turn right (left edge detected) |
-| White | Black | Turn left (right edge detected) |
-| Black | Black | Stop (both edges — abort) |
+Available:
 
----
+- C source and headers
+- STM32 startup and linker files
+- STM32CubeIDE project metadata
+- Proteus project and exported schematic
+- archived simulation HEX file
 
-## Repository Structure
+Not available:
 
-```
-adas-stm32-safety-system/
-├── firmware/
-│   └── stm32_f401/
-│       ├── Src/               # All .c implementation files
-│       ├── Inc/               # All .h headers
-│       ├── Startup/           # startup_stm32f401ccfx.s
-│       ├── STM32F401CCFX_FLASH.ld  # Linker script
-│       ├── .project           # STM32CubeIDE project file
-│       └── .cproject          # CDT build settings
-├── simulation/
-│   └── proteus/
-│       ├── NTI project.pdsprj # Proteus schematic + simulation
-│       ├── NTI project.PDF    # Exported schematic PDF
-│       └── InfraredSensorsTEP.HEX  # Pre-built HEX for simulation
-├── docs/
-│   ├── ARCHITECTURE.md        # Detailed layer breakdown
-│   └── SETUP.md               # Build and flash instructions
-├── .gitignore
-├── LICENSE
-└── README.md
-```
+- physical prototype photographs or video
+- hardware measurements
+- formal timing, braking-distance, or safety tests
+- original per-person task allocation
 
----
+## Repository maintenance
 
-## Getting Started
+In 2026 the archive was reorganized for reproducibility and scholarship review. This cleanup adds missing project metadata, repairs the UART frame construction, restores a missing public interface header, and updates documentation. These maintenance changes are separate from the original 2023 capstone work.
 
-### Prerequisites
+## Team and publication note
 
-- [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html) (tested with 1.13+)
-- ST-Link V2 programmer
-- [Proteus](https://www.labcenter.com/) 8.x (for simulation only)
-- Any serial terminal (RealTerm, PuTTY) at **9600 baud** for UART telemetry
-
-### Build & Flash
-
-```bash
-# 1. Open STM32CubeIDE
-# 2. File → Import → Existing Projects into Workspace
-# 3. Select:  firmware/stm32_f401/
-# 4. Project → Build All
-# 5. Run → Debug (ST-Link) or flash the .hex directly
-```
-
-### Run Simulation
-
-```
-1. Open:  simulation/proteus/NTI project.pdsprj
-2. The pre-built HEX is already linked — press Play
-3. Adjust the ultrasonic distance slider to trigger state transitions
-```
-
----
-
-## Module Reference
-
-| Module | Files | Description |
-|---|---|---|
-| State machine | `SModes_Program.c`, `SModes_Interface.h` | Idle / LowSpeed / HighSpeed logic |
-| System init | `SInit_Program.c`, `SInit_Interface.h` | Peripheral initialization sequence |
-| Ultrasonic | `HCSR04_Program.c`, `HCSR04_Config.c` | Timer IC-based distance measurement |
-| IR sensors | `IR_Program.c` | Left/right digital lane reading |
-| Motor driver | `MotorDriver_Program.c` | L298N PWM speed + direction |
-| LCD | `CLCD_program.c` | 16×2 character display |
-| UART | `UART_Prog.c` | Telemetry transmit / async receive |
-| Buzzer | `Buzzer_Program.c` | Alert control |
-| RCC | `MCAL_RCC_Program.c` | Clock configuration |
-| GPIO | `MCAL_GPIO_Program.c` | Pin mode, output, input |
-| SysTick | `MCAL_STK_Program.c` | 1 ms tick / delay |
-| Timer | `MCAL_TIM_Program.c` | PWM output + input capture |
-| NVIC | `CORE_NVIC_Program.c` | Interrupt priority and enable |
-
----
+This is a five-person team artifact published with team permission. The repository intentionally avoids claiming that one member authored every module.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

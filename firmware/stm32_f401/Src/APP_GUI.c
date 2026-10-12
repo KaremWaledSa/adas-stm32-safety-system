@@ -15,11 +15,22 @@
 #include "APP_GUI.h"
 
 
-u8 D[10];
+static u8 array[24];
 
-u8 S[10];
+static u8 GUI_u8AppendNumber(u8 *Copy_pu8Buffer, u8 Copy_u8Index, u32 Copy_u32Value)
+{
+	u8 Local_u8Digits[11];
+	u8 Local_u8DigitIndex = 0;
 
-u8 array[22];
+	itoa(Copy_u32Value, (char *)Local_u8Digits, 10);
+
+	while ((Local_u8Digits[Local_u8DigitIndex] != '\0') && (Copy_u8Index < 23))
+	{
+		Copy_pu8Buffer[Copy_u8Index++] = Local_u8Digits[Local_u8DigitIndex++];
+	}
+
+	return Copy_u8Index;
+}
 
 void GUI_voidInit(void)
 {
@@ -35,41 +46,15 @@ void GUI_voidInit(void)
 }
 
 
-void GUI_voidSendSpeedDistance(u32 Copy_u8Speed , u32 Copy_u8_Distance )
+void GUI_voidSendSpeedDistance(u32 Copy_u32Speed, u32 Copy_u32Distance)
 {
+	u8 Local_u8Index = 0;
 
-	//Sending motor speed and distance to raspberry pi
+	Local_u8Index = GUI_u8AppendNumber(array, Local_u8Index, Copy_u32Speed);
+	array[Local_u8Index++] = ' ';
+	Local_u8Index = GUI_u8AppendNumber(array, Local_u8Index, Copy_u32Distance);
+	array[Local_u8Index++] = '\r';
+	array[Local_u8Index++] = '\n';
 
-	u8 loop, index, S_len, D_len;
-
-	S_len = D_len = 10;
-
-	index = 0;
-
-	/*Convert Speed int to Speed Str*/
-	itoa (Copy_u8Speed, S, 10);
-	for(loop = 0; loop < S_len; loop++)
-	{
-		array[index] = S[loop];
-		index++;
-	}
-
-	array[index]=' ';
-	index++;
-
-	/*Convert Distance int to Distance Str*/
-	itoa (Copy_u8_Distance, D, 10);
-	for(loop = 0; loop < D_len; loop++)
-	{
-		array[index] = D[loop];
-		index++;
-	}
-	array[index]='\r';
-	index++;
-
-	UART_voidTransmit( array , 22);
-
-	array[0]='\0';
-	S[0]='\0';
-	D[0]='\0';
+	UART_voidTransmit(array, Local_u8Index);
 }
